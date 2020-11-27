@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!--
+  ~ Copyright © Websolute spa. All rights reserved.
+  ~ See COPYING.txt for license details.
+  -->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="transporter_importer" translate="label" sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+            <class>separator-top</class>
+            <label>Importer</label>
+            <tab>transporter</tab>
+            <resource>Websolute_TransporterBase::configuration</resource>
+            <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>General</label>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Enable Importer</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>It depends on flag "TRANSPORTER -> Base -> General -> Enabled Transporter"</comment>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>
