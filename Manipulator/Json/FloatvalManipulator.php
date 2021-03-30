@@ -10,17 +10,18 @@ namespace Websolute\TransporterImporter\Manipulator\Json;
 
 use Magento\Framework\Serialize\Serializer\Json;
 use Monolog\Logger;
-use Websolute\TransporterImporter\Model\DotConvention;
 use Websolute\TransporterBase\Api\ManipulatorInterface;
 use Websolute\TransporterBase\Exception\TransporterException;
 use Websolute\TransporterEntity\Api\Data\EntityInterface;
+use Websolute\TransporterImporter\Model\DotConvention;
 
-class TrimManipulator implements ManipulatorInterface
+class FloatvalManipulator implements ManipulatorInterface
 {
     /**
      * @var Logger
      */
     private $logger;
+
     /**
      * @var Json
      */
@@ -37,21 +38,29 @@ class TrimManipulator implements ManipulatorInterface
     private $field;
 
     /**
+     * @var bool
+     */
+    private $mandatory;
+
+    /**
      * @param Logger $logger
-     * @param string $field
      * @param Json $serializer
      * @param DotConvention $dotConvention
+     * @param string $field
+     * @param bool $mandatory
      */
     public function __construct(
         Logger $logger,
         Json $serializer,
         DotConvention $dotConvention,
-        string $field
+        string $field,
+        bool $mandatory = true
     ) {
         $this->logger = $logger;
         $this->serializer = $serializer;
         $this->dotConvention = $dotConvention;
         $this->field = $field;
+        $this->mandatory = $mandatory;
     }
 
     /**
@@ -64,20 +73,32 @@ class TrimManipulator implements ManipulatorInterface
     public function execute(int $activityId, string $manipulatorType, string $entityIdentifier, array $entities): void
     {
         $downloaderIdentifier = $this->dotConvention->getFirst($this->field);
-        $identifiers = $this->dotConvention->getFromSecondInDotConvention($this->field);
+        $identifiers = $this->dotConvention->getFromSecond($this->field);
 
         if (!array_key_exists($downloaderIdentifier, $entities)) {
-            throw new TransporterException(__('Invalid downloaderIdentifier for class %1', self::class));
+            if ($this->mandatory) {
+                throw new TransporterException(__('Invalid downloaderIdentifier for class %1', self::class));
+            } else {
+                return;
+            }
         }
 
         $entity = $entities[$downloaderIdentifier];
         $data = $entity->getDataManipulated();
         $data = $this->serializer->unserialize($data);
 
-        $field = (string)$this->dotConvention->getValue($data, $identifiers);
-        $field = trim($field);
+        $field = &$data;
 
-        $this->dotConvention->setValue($data, $identifiers, $field);
+        foreach ($identifiers as $identifier) {
+            if (!array_key_exists($identifier, $field)) {
+                return;
+            }
+            $field = &$field[$identifier];
+        }
+
+        if ($field !== null) {
+            $field = floatval($field);
+        }
 
         $data = $this->serializer->serialize($data);
         $entity->setDataManipulated($data);

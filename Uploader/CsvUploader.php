@@ -1,7 +1,7 @@
 <?php
 /*
  * Copyright © Websolute spa. All rights reserved.
- * See COPYING.txt for license details.
+ * See LICENSE and/or COPYING.txt for license details.
  */
 
 declare(strict_types=1);
@@ -12,12 +12,12 @@ use Magento\Framework\Exception\FileSystemException;
 use Magento\Framework\File\Csv as File;
 use Magento\Framework\Filesystem\DirectoryList;
 use Monolog\Logger;
-use Websolute\TransporterImporter\Api\Uploader\Mapping\MappingTypeInterface;
-use Websolute\TransporterImporter\Model\Config;
-use Websolute\TransporterImporter\Uploader\Csv\GetHeadersFromMappings;
+use Websolute\TransporterBase\Api\TransporterConfigInterface;
 use Websolute\TransporterBase\Api\UploaderInterface;
 use Websolute\TransporterBase\Exception\TransporterException;
 use Websolute\TransporterEntity\Api\EntityRepositoryInterface;
+use Websolute\TransporterImporter\Api\Uploader\Mapping\MappingTypeInterface;
+use Websolute\TransporterImporter\Uploader\Csv\GetHeadersFromMappings;
 
 class CsvUploader implements UploaderInterface
 {
@@ -62,9 +62,14 @@ class CsvUploader implements UploaderInterface
     private $getHeadersFromMappings;
 
     /**
-     * @var Config
+     * @var TransporterConfigInterface
      */
     private $config;
+
+    /**
+     * @var bool
+     */
+    private $addActivityIdToPath;
 
     /**
      * @param Logger $logger
@@ -75,7 +80,8 @@ class CsvUploader implements UploaderInterface
      * @param File $csv
      * @param DirectoryList $directoryList
      * @param GetHeadersFromMappings $getHeadersFromMappings
-     * @param Config $config
+     * @param TransporterConfigInterface $config
+     * @param bool $addActivityIdToPath
      * @throws TransporterException
      */
     public function __construct(
@@ -87,7 +93,8 @@ class CsvUploader implements UploaderInterface
         File $csv,
         DirectoryList $directoryList,
         GetHeadersFromMappings $getHeadersFromMappings,
-        Config $config
+        TransporterConfigInterface $config,
+        bool $addActivityIdToPath = false
     ) {
         $this->logger = $logger;
         $this->fileName = $fileName;
@@ -104,6 +111,7 @@ class CsvUploader implements UploaderInterface
         $this->directoryList = $directoryList;
         $this->getHeadersFromMappings = $getHeadersFromMappings;
         $this->config = $config;
+        $this->addActivityIdToPath = $addActivityIdToPath;
     }
 
     /**
@@ -135,19 +143,24 @@ class CsvUploader implements UploaderInterface
             ));
 
             try {
-                $data = $this->getData($entities);
-                $this->appendToFile($file, $data);
+                $this->appendChildrenFirst($file, $entities);
             } catch (FileSystemException $e) {
-                if ($this->config) {
-                    $this->logger->error(__(
-                        'activityId:%1 ~ Uploader ~ uploaderType:%2 ~ entityIdentifier:%3 ~ ERROR ~ error:%4',
+                $this->logger->error(__(
+                    'activityId:%1 ~ Uploader ~ uploaderType:%2 ~ entityIdentifier:%3 ~ ERROR ~ error:%4',
+                    $activityId,
+                    $uploaderType,
+                    $entityIdentifier,
+                    $e->getMessage()
+                ));
+
+                if (!$this->config->continueInCaseOfErrors()) {
+                    throw new TransporterException(__(
+                        'activityId:%1 ~ Uploader ~ uploaderType:%2 ~ entityIdentifier:%3 ~ END ~ Because of continueInCaseOfErrors = false',
                         $activityId,
                         $uploaderType,
-                        $entityIdentifier,
-                        $e->getMessage()
+                        $entityIdentifier
                     ));
                 }
-                continue;
             }
 
             $this->logger->info(__(
@@ -168,7 +181,13 @@ class CsvUploader implements UploaderInterface
     {
         $fileName = $this->fileName . '_' . (string)$activityId . '_01.csv';
         $directory = $this->directoryList->getPath(\Magento\Framework\App\Filesystem\DirectoryList::ROOT);
-        return $directory . DIRECTORY_SEPARATOR . $this->filePath . DIRECTORY_SEPARATOR . $fileName;
+        $path = $directory . DIRECTORY_SEPARATOR . $this->filePath . DIRECTORY_SEPARATOR;
+        if ($this->addActivityIdToPath) {
+            $path .= $activityId . DIRECTORY_SEPARATOR;
+            @mkdir($path, 0755, true);
+        }
+        $path .= $fileName;
+        return $path;
     }
 
     /**
@@ -182,10 +201,19 @@ class CsvUploader implements UploaderInterface
     }
 
     /**
+     * @param string $file
+     * @param array $entities
+     */
+    protected function appendChildrenFirst(string $file, array $entities)
+    {
+    }
+
+    /**
      * @param array $entities
      * @return array[]
+     * @throw TransporterException
      */
-    private function getData(array $entities): array
+    protected function getData(array $entities): array
     {
         $data = [];
         foreach ($this->mappings as $mapping) {
@@ -199,7 +227,7 @@ class CsvUploader implements UploaderInterface
      * @param array $data
      * @throws FileSystemException
      */
-    private function appendToFile(string $file, array $data)
+    protected function appendToFile(string $file, array $data)
     {
         $this->csv->appendData($file, $data, 'a+');
     }

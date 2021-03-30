@@ -12,7 +12,7 @@ use Websolute\TransporterImporter\Api\Uploader\Mapping\MappingTypeInterface;
 use Websolute\TransporterImporter\Model\DotConvention;
 use Websolute\TransporterBase\Exception\TransporterException;
 
-class Path implements MappingTypeInterface
+class DirectPath implements MappingTypeInterface
 {
     /**
      * @var string

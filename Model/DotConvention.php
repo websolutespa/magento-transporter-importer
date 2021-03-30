@@ -1,56 +1,175 @@
 <?php
 /*
  * Copyright © Websolute spa. All rights reserved.
- * See COPYING.txt for license details.
+ * See LICENSE and/or COPYING.txt for license details.
  */
 
 declare(strict_types=1);
 
 namespace Websolute\TransporterImporter\Model;
 
+use Magento\Framework\Serialize\Serializer\Json;
 use Websolute\TransporterBase\Exception\TransporterException;
 
 class DotConvention
 {
     /**
-     * @param string $value
-     * @return string
+     * @var Json
+     */
+    private $serializer;
+
+    /**
+     * @param Json $serializer
+     */
+    public function __construct(
+        Json $serializer
+    ) {
+        $this->serializer = $serializer;
+    }
+
+    /**
+     * @param array $data
+     * @param string $path
+     * @param $value
      * @throws TransporterException
      */
-    public function getFirst(string $value): string
+    public function setValue(array &$data, string $path, $value): void
     {
-        $values = $this->getAll($value);
+        $field = &$data;
+
+        $identifiers = explode('.', $path);
+
+        foreach ($identifiers as $key => $identifier) {
+            if ($identifier === '*' && is_array($field)) {
+                $subFields = &$field;
+                $remainingIdentifiers = array_slice($identifiers, array_search($identifier, $identifiers) + 1);
+                $remainingIdentifiers = $this->serialize($remainingIdentifiers);
+                foreach ($subFields as &$subField) {
+                    $this->setValue($subField, $remainingIdentifiers, $value);
+                }
+                return;
+            }
+
+            if (!array_key_exists($identifier, $field)) {
+                if ($key < (count($identifiers) - 1)) {
+                    $field[$identifier] = [];
+                } else {
+                    $field[$identifier] = '';
+                }
+            }
+            $field = &$field[$identifier];
+        }
+
+        $field = $value;
+    }
+
+    /**
+     * @param array $values
+     * @return string
+     */
+    public function serialize(array $values): string
+    {
+        return implode('.', $values);
+    }
+
+    /**
+     * @param array $data
+     * @param string $path
+     * @return mixed
+     * @throws TransporterException
+     */
+    public function getValue(array $data, string $path)
+    {
+        $identifier = $this->getFirst($path);
+
+        if (!array_key_exists($identifier, $data)) {
+            $serializeData = $this->serializer->serialize($data);
+            throw new TransporterException(
+                __('Invalid identifier/path: %1 into provided data: %2', $path, $serializeData)
+            );
+        }
+
+        $value = $data[$identifier];
+
+        $identifiers = $this->getFromSecond($path);
+
+        foreach ($identifiers as $identifier) {
+            if (!array_key_exists($identifier, $value)) {
+                $serializeData = $this->serializer->serialize($data);
+                throw new TransporterException(__('Invalid identifier/path: %1 into provided data: %2', $path, $serializeData));
+            }
+            $value = $value[$identifier];
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param string $path
+     * @return string
+     */
+    public function getFirst(string $path): string
+    {
+        $values = $this->getAll($path);
 
         return (string)array_shift($values);
     }
 
     /**
-     * @param string $value
+     * @param string $path
      * @return string[]
-     * @throws TransporterException
      */
-    public function getAll(string $value): array
+    public function getAll(string $path): array
     {
-        $values = explode('.', $value);
+        return explode('.', $path);
+    }
 
-        if (count($values) < 2) {
-            throw new TransporterException(__('Invalid identifier: %1', $value));
-        }
+    /**
+     * @param string $path
+     * @return array
+     */
+    public function getFromSecond(string $path): array
+    {
+        $values = $this->getAll($path);
+
+        array_shift($values);
 
         return $values;
     }
 
     /**
-     * @param string $value
-     * @return array
+     * @param array $data
+     * @param string $path
+     * @return mixed
      * @throws TransporterException
      */
-    public function getFromSecond(string $value): array
+    public function getValueFromSecond(array $data, string $path)
     {
-        $values = $this->getAll($value);
+        $identifiers = $this->getFromSecond($path);
+
+        $value = $data;
+
+        foreach ($identifiers as $identifier) {
+            if (!array_key_exists($identifier, $value)) {
+                $serializeData = $this->serializer->serialize($data);
+                throw new TransporterException(__('Invalid identifier/path: %1 into provided data: %2', $path, $serializeData));
+            }
+            $value = $value[$identifier];
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param string $path
+     * @return string
+     */
+    public function getFromSecondInDotConvention(string $path): string
+    {
+        $values = $this->getAll($path);
 
         array_shift($values);
 
-        return $values;
+        return implode('.', $values);
     }
 }

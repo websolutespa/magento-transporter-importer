@@ -15,12 +15,13 @@ use Websolute\TransporterBase\Api\ManipulatorInterface;
 use Websolute\TransporterBase\Exception\TransporterException;
 use Websolute\TransporterEntity\Api\Data\EntityInterface;
 
-class TrimManipulator implements ManipulatorInterface
+class CopyManipulator implements ManipulatorInterface
 {
     /**
      * @var Logger
      */
     private $logger;
+
     /**
      * @var Json
      */
@@ -34,24 +35,32 @@ class TrimManipulator implements ManipulatorInterface
     /**
      * @var string
      */
-    private $field;
+    private $source;
+
+    /**
+     * @var string
+     */
+    private $destination;
 
     /**
      * @param Logger $logger
-     * @param string $field
      * @param Json $serializer
      * @param DotConvention $dotConvention
+     * @param string $source
+     * @param string $destination
      */
     public function __construct(
         Logger $logger,
         Json $serializer,
         DotConvention $dotConvention,
-        string $field
+        string $source,
+        string $destination
     ) {
         $this->logger = $logger;
         $this->serializer = $serializer;
         $this->dotConvention = $dotConvention;
-        $this->field = $field;
+        $this->source = $source;
+        $this->destination = $destination;
     }
 
     /**
@@ -63,21 +72,26 @@ class TrimManipulator implements ManipulatorInterface
      */
     public function execute(int $activityId, string $manipulatorType, string $entityIdentifier, array $entities): void
     {
-        $downloaderIdentifier = $this->dotConvention->getFirst($this->field);
-        $identifiers = $this->dotConvention->getFromSecondInDotConvention($this->field);
+        $sourceIdentifier = $this->dotConvention->getFirst($this->source);
+        $source = $this->dotConvention->getFromSecondInDotConvention($this->source);
 
-        if (!array_key_exists($downloaderIdentifier, $entities)) {
-            throw new TransporterException(__('Invalid downloaderIdentifier for class %1', self::class));
+        if (!array_key_exists($sourceIdentifier, $entities)) {
+            throw new TransporterException(__('Invalid sourceIdentifier for class %1', self::class));
         }
 
-        $entity = $entities[$downloaderIdentifier];
+        $destinationIdentifier = $this->dotConvention->getFirst($this->destination);
+        $destination = $this->dotConvention->getFromSecondInDotConvention($this->destination);
+
+        if (!array_key_exists($destinationIdentifier, $entities)) {
+            throw new TransporterException(__('Invalid destinationIdentifier for class %1', self::class));
+        }
+
+        $entity = $entities[$sourceIdentifier];
         $data = $entity->getDataManipulated();
         $data = $this->serializer->unserialize($data);
 
-        $field = (string)$this->dotConvention->getValue($data, $identifiers);
-        $field = trim($field);
-
-        $this->dotConvention->setValue($data, $identifiers, $field);
+        $value = $this->dotConvention->getValue($data, $source);
+        $this->dotConvention->setValue($data, $destination, $value);
 
         $data = $this->serializer->serialize($data);
         $entity->setDataManipulated($data);

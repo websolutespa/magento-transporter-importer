@@ -10,17 +10,18 @@ namespace Websolute\TransporterImporter\Manipulator\Json;
 
 use Magento\Framework\Serialize\Serializer\Json;
 use Monolog\Logger;
-use Websolute\TransporterImporter\Model\DotConvention;
 use Websolute\TransporterBase\Api\ManipulatorInterface;
 use Websolute\TransporterBase\Exception\TransporterException;
 use Websolute\TransporterEntity\Api\Data\EntityInterface;
+use Websolute\TransporterImporter\Model\DotConvention;
 
-class TrimManipulator implements ManipulatorInterface
+class CopyToChildrenManipulator implements ManipulatorInterface
 {
     /**
      * @var Logger
      */
     private $logger;
+
     /**
      * @var Json
      */
@@ -34,23 +35,39 @@ class TrimManipulator implements ManipulatorInterface
     /**
      * @var string
      */
+    private $childrenOption;
+
+    /**
+     * @var string
+     */
+    private $pathAttributeWhereCopy;
+
+    /**
+     * @var string
+     */
     private $field;
 
     /**
      * @param Logger $logger
-     * @param string $field
      * @param Json $serializer
      * @param DotConvention $dotConvention
+     * @param string $childrenOption
+     * @param string $pathAttributeWhereCopy
+     * @param string $field
      */
     public function __construct(
         Logger $logger,
         Json $serializer,
         DotConvention $dotConvention,
+        string $childrenOption,
+        string $pathAttributeWhereCopy,
         string $field
     ) {
         $this->logger = $logger;
         $this->serializer = $serializer;
         $this->dotConvention = $dotConvention;
+        $this->childrenOption = $childrenOption;
+        $this->pathAttributeWhereCopy = $pathAttributeWhereCopy;
         $this->field = $field;
     }
 
@@ -60,12 +77,17 @@ class TrimManipulator implements ManipulatorInterface
      * @param string $entityIdentifier
      * @param EntityInterface[] $entities
      * @throws TransporterException
+     * @throws TransporterException
      */
-    public function execute(int $activityId, string $manipulatorType, string $entityIdentifier, array $entities): void
-    {
-        $downloaderIdentifier = $this->dotConvention->getFirst($this->field);
-        $identifiers = $this->dotConvention->getFromSecondInDotConvention($this->field);
+    public function execute(
+        int $activityId,
+        string $manipulatorType,
+        string $entityIdentifier,
+        array $entities
+    ): void {
+        $downloaderIdentifier = $this->dotConvention->getFirst($this->pathAttributeWhereCopy);
 
+        $identifier = $this->dotConvention->getFromSecondInDotConvention($this->pathAttributeWhereCopy);
         if (!array_key_exists($downloaderIdentifier, $entities)) {
             throw new TransporterException(__('Invalid downloaderIdentifier for class %1', self::class));
         }
@@ -74,10 +96,20 @@ class TrimManipulator implements ManipulatorInterface
         $data = $entity->getDataManipulated();
         $data = $this->serializer->unserialize($data);
 
-        $field = (string)$this->dotConvention->getValue($data, $identifiers);
-        $field = trim($field);
+        //for childrens
+        $options = $data[$this->childrenOption];
+        foreach ($options as $key => $option) {
+            if (!isset($data[$this->childrenOption][$key][$this->field])) {
 
-        $this->dotConvention->setValue($data, $identifiers, $field);
+                if (!isset($data[$identifier])) {
+                    $value = $this->dotConvention->getValue($data, $identifier);
+                } else {
+                    $value = $data[$identifier];
+                }
+
+                $data[$this->childrenOption][$key][$this->field] = $value;
+            }
+        }
 
         $data = $this->serializer->serialize($data);
         $entity->setDataManipulated($data);

@@ -16,7 +16,7 @@ use Websolute\TransporterBase\Api\ManipulatorInterface;
 use Websolute\TransporterBase\Exception\TransporterException;
 use Websolute\TransporterEntity\Api\Data\EntityInterface;
 
-class ConcatManipulator implements ManipulatorInterface
+class SumFloatManipulator implements ManipulatorInterface
 {
     /**
      * @var Logger
@@ -44,32 +44,24 @@ class ConcatManipulator implements ManipulatorInterface
     private $paths;
 
     /**
-     * @var string
-     */
-    private $glue;
-
-    /**
      * @param Logger $logger
      * @param Json $serializer
      * @param DotConvention $dotConvention
      * @param string $destination
      * @param string[] $paths
-     * @param string $glue
      */
     public function __construct(
         Logger $logger,
         Json $serializer,
         DotConvention $dotConvention,
         string $destination,
-        array $paths,
-        string $glue
+        array $paths
     ) {
         $this->logger = $logger;
         $this->serializer = $serializer;
         $this->dotConvention = $dotConvention;
         $this->destination = $destination;
         $this->paths = $paths;
-        $this->glue = $glue;
     }
 
     /**
@@ -81,8 +73,6 @@ class ConcatManipulator implements ManipulatorInterface
      */
     public function execute(int $activityId, string $manipulatorType, string $entityIdentifier, array $entities): void
     {
-        $value = $this->getValue($entities);
-
         $downloaderIdentifier = $this->dotConvention->getFirst($this->destination);
 
         $entity = $entities[$downloaderIdentifier];
@@ -93,21 +83,9 @@ class ConcatManipulator implements ManipulatorInterface
             throw new TransporterException(__('Invalid downloaderIdentifier for class ', self::class));
         }
 
-        $field = &$data;
-
-        $identifiers = $this->dotConvention->getFromSecond($this->destination);
-        foreach ($identifiers as $key => $identifier) {
-            if (!array_key_exists($identifier, $field)) {
-                if ($key < (count($identifiers) - 1)) {
-                    $field[$identifier] = [];
-                } else {
-                    $field[$identifier] = '';
-                }
-            }
-            $field = &$field[$identifier];
-        }
-
-        $field = $value;
+        $value = $this->getValue($entities);
+        $destination = $this->dotConvention->getFromSecondInDotConvention($this->destination);
+        $this->dotConvention->setValue($data, $destination, $value);
 
         $data = $this->serializer->serialize($data);
         $entity->setDataManipulated($data);
@@ -115,12 +93,12 @@ class ConcatManipulator implements ManipulatorInterface
 
     /**
      * @param array $entities
-     * @return string
+     * @return float
      * @throws TransporterException
      */
-    private function getValue(array $entities): string
+    private function getValue(array $entities): float
     {
-        $value = '';
+        $value = 0.0;
 
         foreach ($this->paths as $path) {
             $downloaderIdentifier = $this->dotConvention->getFirst($path);
@@ -132,18 +110,11 @@ class ConcatManipulator implements ManipulatorInterface
                 throw new TransporterException(__('Invalid downloaderIdentifier for class ', self::class));
             }
 
-            $identifiers = $this->dotConvention->getFromSecond($path);
-
-            $pathValue = $data;
-            foreach ($identifiers as $identifier) {
-                if (!array_key_exists($identifier, $pathValue)) {
-                    throw new TransporterException(__('Non existing identifier %1', $path));
-                }
-                $pathValue = $pathValue[$identifier];
-            }
-            $value .= $pathValue . $this->glue;
+            $pathIdentifier = $this->dotConvention->getFromSecondInDotConvention($path);
+            $pathValue = $this->dotConvention->getValue($data, $pathIdentifier);
+            $value += (float)$pathValue;
         }
 
-        return (string)substr($value, 0, -strlen($this->glue));
+        return $value;
     }
 }
